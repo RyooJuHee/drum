@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>선생님 몰래 스틱 스핀</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes spin-fast {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.2); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+        .animate-spin-stick { animation: spin-fast 0.4s ease-in-out; }
+        
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #fca5a5;
+            border-radius: 50%;
+            pointer-events: none;
+            animation: fall 1s ease-out forwards;
+        }
+        @keyframes fall {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100px) rotate(360deg); opacity: 0; }
+        }
+        
+        .teacher-bg { transition: background-color 0.3s ease; }
+        .bg-watching { background-color: #fce7f3; } /* Pink when watching */
+        .bg-safe { background-color: #e0e7ff; }
+    </style>
+</head>
+<body class="bg-indigo-50 font-sans h-screen flex flex-col items-center justify-center overflow-hidden">
+
+    <div id="game-container" class="w-full max-w-md h-full flex flex-col p-4 bg-white shadow-xl relative">
+        <div class="flex justify-between items-center mb-4">
+            <div id="score-board" class="text-xl font-bold text-indigo-800">점수: 0</div>
+            <div id="hearts" class="flex gap-1 text-2xl">❤️❤️❤️</div>
+        </div>
+
+        <div id="teacher-box" class="teacher-bg bg-safe flex-grow flex flex-col items-center justify-center rounded-2xl mb-4 relative p-6">
+            <!-- Cutier Teacher SVG -->
+            <svg width="120" height="120" viewBox="0 0 100 100" class="mb-2 drop-shadow-lg">
+                <circle cx="50" cy="50" r="45" fill="#fde68a" stroke="#d97706" stroke-width="2" />
+                <!-- Eyes -->
+                <ellipse id="eye-left" cx="35" cy="40" rx="6" ry="8" fill="#4338ca" />
+                <ellipse id="eye-right" cx="65" cy="40" rx="6" ry="8" fill="#4338ca" />
+                <!-- Smile -->
+                <path d="M35 70 Q 50 80 65 70" stroke="#92400e" stroke-width="4" fill="none" />
+                <!-- Glasses -->
+                <rect x="25" y="30" width="20" height="20" rx="5" stroke="#78350f" fill="none" />
+                <rect x="55" y="30" width="20" height="20" rx="5" stroke="#78350f" fill="none" />
+            </svg>
+            <div id="teacher-status" class="font-bold text-lg text-indigo-900 mt-2">수업 시작!</div>
+        </div>
+
+        <div id="game-area" class="h-64 flex flex-col items-center justify-center border-4 border-dashed border-indigo-200 rounded-2xl cursor-pointer touch-none relative" onclick="handleSpin()" ontouchstart="handleSpin()">
+            <!-- Stationary Drum -->
+            <div class="text-8xl select-none mb-4">🥁</div>
+            <!-- Spinning Stick -->
+            <div id="drumstick" class="text-6xl select-none absolute">🥢</div>
+            <p class="text-indigo-400 mt-20 font-semibold text-sm">탭해서 돌리기!</p>
+        </div>
+
+        <div class="mt-4 text-center">
+            <div id="timer" class="text-3xl font-bold text-red-500">20초</div>
+        </div>
+    </div>
+
+    <div id="modal" class="hidden absolute inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-2xl text-center shadow-2xl">
+            <h2 class="text-3xl font-bold mb-4">게임 종료!</h2>
+            <p id="final-score" class="text-xl mb-6"></p>
+            <button onclick="resetGame()" class="bg-indigo-600 text-white px-8 py-3 rounded-full font-bold hover:bg-indigo-700 transition">다시 시작</button>
+        </div>
+    </div>
+
+    <script>
+        let score = 0;
+        let lives = 3;
+        let timeLeft = 20;
+        let isWatching = false;
+        let gameActive = false;
+        let gameInterval, teacherInterval;
+
+        const scoreEl = document.getElementById('score-board');
+        const heartsEl = document.getElementById('hearts');
+        const timerEl = document.getElementById('timer');
+        const teacherStatusEl = document.getElementById('teacher-status');
+        const teacherBox = document.getElementById('teacher-box');
+        const drumstick = document.getElementById('drumstick');
+        const modal = document.getElementById('modal');
+
+        function spawnConfetti() {
+            for(let i = 0; i < 5; i++) {
+                const c = document.createElement('div');
+                c.className = 'confetti';
+                c.style.left = (Math.random() * 100) + '%';
+                c.style.top = '50%';
+                c.style.backgroundColor = ['#fbbf24', '#f87171', '#34d399'][Math.floor(Math.random()*3)];
+                document.getElementById('game-area').appendChild(c);
+                setTimeout(() => c.remove(), 1000);
+            }
+        }
+
+        function updateTeacher() {
+            isWatching = Math.random() > 0.6;
+            if (isWatching) {
+                teacherBox.classList.add('bg-watching');
+                teacherBox.classList.remove('bg-safe');
+                teacherStatusEl.innerText = "선생님이 보는 중!";
+            } else {
+                teacherBox.classList.add('bg-safe');
+                teacherBox.classList.remove('bg-watching');
+                teacherStatusEl.innerText = "안 보는 중!";
+            }
+        }
+
+        function handleSpin() {
+            if (!gameActive) return;
+            
+            drumstick.classList.remove('animate-spin-stick');
+            void drumstick.offsetWidth;
+            drumstick.classList.add('animate-spin-stick');
+
+            if (isWatching) {
+                lives--;
+                heartsEl.innerText = '❤️'.repeat(lives);
+                if (lives <= 0) endGame();
+            } else {
+                score += 10;
+                scoreEl.innerText = `점수: ${score}`;
+                spawnConfetti();
+            }
+        }
+
+        function startGame() {
+            gameActive = true;
+            score = 0;
+            lives = 3;
+            timeLeft = 20;
+            heartsEl.innerText = '❤️❤️❤️';
+            modal.classList.add('hidden');
+            
+            clearInterval(gameInterval);
+            clearInterval(teacherInterval);
+            
+            gameInterval = setInterval(() => {
+                timeLeft--;
+                timerEl.innerText = `${timeLeft}초`;
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+            
+            teacherInterval = setInterval(updateTeacher, 1200);
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(gameInterval);
+            clearInterval(teacherInterval);
+            document.getElementById('final-score').innerText = `최종 점수: ${score}`;
+            modal.classList.remove('hidden');
+        }
+
+        function resetGame() { startGame(); }
+        window.onload = startGame;
+    </script>
+</body>
+</html>
